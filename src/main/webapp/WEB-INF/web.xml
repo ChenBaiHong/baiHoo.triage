@@ -1,0 +1,173 @@
+<?xml version="1.1" encoding="UTF-8"?>
+<web-app xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+		 xmlns="http://java.sun.com/xml/ns/javaee" xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_3_0.xsd" version="3.0">
+  <display-name>triage</display-name>
+  <context-param>
+    <param-name>contextConfigLocation</param-name>
+    <param-value>
+			classpath*:/applicationContext.xml,
+			classpath*:/applicationContext-shiro.xml
+		</param-value>
+  </context-param>
+  <!-- 
+  
+  spring允许我们通过定义 profile 来将若干不同的 bean 定义组织起来，从而实现不同环境自动激活不同的 profile 
+      来切换配置参数的功能，下面介绍以 xml 的方式定义 profile、如何激活 profile以及定义默认的 profile，整个过程我以配置不同环境的数据源为例
+      为了简化配置，这里假设只有开发和生产两个环境。
+  
+     默认 profile 是指在没有任何 profile 被激活的情况下，默认 profile 内定义的内容将被使用，
+     通常可以在 web.xml 中定义全局 servlet 上下文参数 spring.profiles.default 实现
+   -->
+  <context-param>
+    <param-name>spring.profiles.default</param-name>
+    <param-value>production</param-value>
+  </context-param>
+  <listener>
+    <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
+  </listener>
+  <!-- 
+  
+  	Spring里的字符过滤器CharacterEncodingFilter是针对请求的，forceEncoding=true是意思是指无论客户端请求是否包含了编码，都用过滤器里的编码来解析请求 
+  	
+  -->
+  <filter>
+    <filter-name>encodingFilter</filter-name>
+    <filter-class>org.springframework.web.filter.CharacterEncodingFilter</filter-class>
+    <init-param>
+      <param-name>encoding</param-name>
+      <param-value>UTF-8</param-value>
+    </init-param>
+    <init-param>
+      <param-name>forceEncoding</param-name>
+      <param-value>true</param-value>
+    </init-param>
+  </filter>
+  <filter-mapping>
+    <filter-name>encodingFilter</filter-name>
+    <url-pattern>/*</url-pattern>
+  </filter-mapping>
+ <!-- 
+	spring为我们解决hibernate的Session的关闭与开启问题。 
+		1. Hibernate 允许对关联对象、属性进行延迟加载，但是必须保证延迟加载的操作限于同一个 Hibernate Session 范围之内进行。
+		如果 Service 层返回一个启用了延迟加载功能的领域对象给 Web 层，当 Web 层访问到那些需要延迟加载的数据时，由于加载领域对象的 
+		Hibernate Session 已经关闭，这些导致延迟加载数据的访问异常 用来把一个Hibernate Session和一次完整的请求过程对应的线程相绑定
+		
+		2. OpenSessionInViewFilter的主要功能是用来把一个Hibernate Session和一次完整的请求过程对应的线程相绑定。
+		目的是为了实现"Open Session in View"的模式。例如： 它允许在事务提交之后延迟加载显示所需要的对象。
+		
+		3.  OpenSessionInViewFilter 过滤器将 Hibernate Session 绑定到请求线程中，它将自动被 Spring 的事务管理器探测到。
+		所以 OpenSessionInViewFilter 适用于 Service 层使用HibernateTransactionManager 或 JtaTransactionManager 
+		进行事务管理的环境，也可以用于非事务只读的数据操作中。
+  -->
+  <filter>
+    <filter-name>openSessionInViewFilter</filter-name>
+    <filter-class>org.springframework.orm.hibernate4.support.OpenSessionInViewFilter</filter-class>
+  </filter>
+  <filter-mapping>
+    <filter-name>openSessionInViewFilter</filter-name>
+    <url-pattern>/*</url-pattern>
+  </filter-mapping>
+  <!-- 
+  	ajax异步请求，针对session超时处理 
+   -->
+  <filter>
+    <filter-name>ajaxFilter</filter-name>
+    <filter-class>com.baiHoo.triage.system.utils.AjaxFilter</filter-class>
+  </filter>
+  <filter-mapping>
+    <filter-name>ajaxFilter</filter-name>
+    <url-pattern>/*</url-pattern>
+  </filter-mapping>
+  
+  <filter>
+    <filter-name>shiroFilter</filter-name>
+    <filter-class>org.springframework.web.filter.DelegatingFilterProxy</filter-class>
+    <init-param>
+      <param-name>targetFilterLifecycle</param-name>
+      <param-value>true</param-value>
+    </init-param>
+  </filter>
+  <filter-mapping>
+    <filter-name>shiroFilter</filter-name>
+    <url-pattern>/*</url-pattern>
+  </filter-mapping>
+  <!-- 
+  		springMVC全局配必要置信息
+  
+   -->
+  <servlet>
+    <servlet-name>springServlet</servlet-name>
+    <servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>
+    <init-param>
+      <param-name>contextConfigLocation</param-name>
+      <param-value>classpath*:/spring-mvc.xml</param-value>
+    </init-param>
+    <load-on-startup>1</load-on-startup>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>springServlet</servlet-name>
+    <url-pattern>/</url-pattern>
+  </servlet-mapping>
+  <!-- 
+  	StatViewServlet是一个标准的javax.servlet.http.HttpServlet，需要配置在你web应用中的WEB-INF/web.xml中
+  	
+  	StatViewSerlvet展示出来的监控信息比较敏感，是系统运行的内部情况，如果你需要做访问控制，可以配置allow和deny这两个参数。比如：
+	 <servlet> 
+		 <servlet-name>DruidStatView</servlet-name> 
+		 <servlet-class>com.alibaba.druid.support.http.StatViewServlet</servlet-class> 
+		 <init-param> 
+			 <param-name>allow</param-name> 
+			 <param-value>128.242.127.1/24,128.242.128.1</param-value> 
+		 </init-param> 
+		 <init-param> 
+		 	<param-name>deny</param-name> 
+		 	<param-value>128.242.127.4</param-value> </init-param> 
+	 </servlet>
+		判断规则
+		deny优先于allow，如果在deny列表中，就算在allow列表中，也会被拒绝。 
+		如果allow没有配置或者为空，则允许所有访问 
+		
+	Druid内置提供了一个StatViewServlet用于展示Druid的统计信息。
+	这个StatViewServlet的用途包括：
+	提供监控信息展示的html页面 
+	提供监控信息的JSON API 
+   -->
+  <servlet>
+    <servlet-name>DruidStatView</servlet-name>
+    <servlet-class>com.alibaba.druid.support.http.StatViewServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>DruidStatView</servlet-name>
+    <url-pattern>/druid/*</url-pattern>
+  </servlet-mapping>
+  <!-- 
+  	Kaptcha是一个基于SimpleCaptcha的验证码开源项目。在springMVC环境下，使用kaptcha
+   -->
+  <servlet>
+    <servlet-name>kaptcha</servlet-name>
+    <servlet-class>com.google.code.kaptcha.servlet.KaptchaServlet</servlet-class>
+  </servlet>
+  <servlet-mapping>
+    <servlet-name>kaptcha</servlet-name>
+    <url-pattern>/static/images/kaptcha.jpg</url-pattern>
+  </servlet-mapping>
+  <session-config>
+    <session-timeout>20</session-timeout>
+  </session-config>
+  <error-page>
+    <exception-type>java.lang.Throwable</exception-type>
+    <location>/WEB-INF/views/error/500.jsp</location>
+  </error-page>
+  <error-page>
+    <error-code>500</error-code>
+    <location>/WEB-INF/views/error/500.jsp</location>
+  </error-page>
+  <error-page>
+    <error-code>404</error-code>
+    <location>/WEB-INF/views/error/404.jsp</location>
+  </error-page>
+  <error-page>
+    <error-code>403</error-code>
+    <location>/WEB-INF/views/error/403.jsp</location>
+  </error-page>
+</web-app>
